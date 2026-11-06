@@ -2,52 +2,69 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Bubble Shooter Match-3</title>
     <style>
-        /* Estilos para que se vea bien en cualquier pantalla */
-        body {
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html, body {
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
             background-color: #0a0a2a;
+            overscroll-behavior: none;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            font-family: 'Arial', sans-serif;
         }
         canvas {
             background-color: #111;
-            border: 3px solid #fff;
             border-radius: 10px;
             cursor: crosshair;
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
-            max-width: 100%;
-            max-height: 100%;
+            box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255, 255, 255, 0.2);
+            /* Mantiene la proporción 4:5 y se ajusta a cualquier pantalla */
+            aspect-ratio: 4 / 5;
+            height: min(96vh, 96dvh, 120vw);
+            width: auto;
+            max-width: 96vw;
+            /* Evita que el navegador haga scroll/zoom al tocar el juego */
+            touch-action: none;
         }
     </style>
 </head>
 <body>
 
-    <!-- El lienzo donde se dibuja el juego -->
     <canvas id="game" width="400" height="500"></canvas>
 
     <script>
-        // Esperar a que el DOM cargue completamente antes de ejecutar el script
         window.onload = function() {
-            
+
             const canvas = document.getElementById('game');
             const ctx = canvas.getContext('2d');
-            
+
             // Configuración del juego
             const cols = 8;
             const rows = 10;
-            const r = 23; 
-            const offsetX = 15; 
-            const offsetY = 15; 
-            
-            let grid = []; 
+            const r = 23;
+            const offsetX = 15;
+            const offsetY = 15;
+
+            const cannonX = canvas.width / 2;
+            const cannonY = canvas.height - 50;
+            const minAngle = 0.15; // Ángulo mínimo respecto a la horizontal
+
+            let grid = [];
             const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'cyan'];
 
             // Variables de estado
@@ -58,8 +75,8 @@
             let currentColor = getRandomColor();
             let nextColor = getRandomColor();
             let score = 0;
+            let falling = []; // burbujas que están cayendo (animación)
 
-            // Funciones auxiliares
             function getRandomColor() {
                 return colors[Math.floor(Math.random() * colors.length)];
             }
@@ -93,17 +110,25 @@
                 };
             }
 
+            // Ángulo de tiro: siempre hacia arriba (evita disparar hacia abajo)
+            function getAimAngle() {
+                let angle = Math.atan2(mouseY - cannonY, mouseX - cannonX);
+                if (angle > -minAngle && angle <= Math.PI / 2) angle = -minAngle;
+                else if (angle > Math.PI / 2 || angle < -Math.PI + minAngle) angle = -Math.PI + minAngle;
+                return angle;
+            }
+
             function drawBubble(x, y, color) {
                 ctx.beginPath();
                 ctx.arc(x, y, r, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
-                // Brillo 3D
                 ctx.beginPath();
                 ctx.arc(x - 5, y - 5, r / 3, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
                 ctx.fill();
-                // Borde
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
                 ctx.strokeStyle = "rgba(0,0,0,0.3)";
                 ctx.lineWidth = 1;
                 ctx.stroke();
@@ -111,8 +136,7 @@
 
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                // Dibujar cuadrícula
+
                 for (let y = 0; y < rows; y++) {
                     for (let x = 0; x < cols; x++) {
                         let b = grid[y][x];
@@ -123,62 +147,71 @@
                     }
                 }
 
-                // Dibujar cañón
+                // Cañón
                 ctx.fillStyle = "#444";
                 ctx.fillRect(canvas.width/2 - 25, canvas.height - 50, 50, 50);
                 ctx.fillStyle = "#666";
                 ctx.beginPath();
-                ctx.arc(canvas.width/2, canvas.height - 50, 20, 0, Math.PI * 2);
+                ctx.arc(cannonX, cannonY, 20, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Burbuja en el cañón
                 if (!projectile) {
-                    drawBubble(canvas.width/2, canvas.height - 50, currentColor);
+                    drawBubble(cannonX, cannonY, currentColor);
                 }
 
-                // Línea de guía
+                // Línea de guía (más larga y visible para el móvil)
                 if (!isShooting) {
+                    const angle = getAimAngle();
                     ctx.beginPath();
-                    ctx.moveTo(canvas.width/2, canvas.height - 50);
-                    ctx.lineTo(mouseX, mouseY);
-                    ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+                    ctx.moveTo(cannonX, cannonY);
+                    ctx.lineTo(cannonX + Math.cos(angle) * 300, cannonY + Math.sin(angle) * 300);
+                    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
                     ctx.lineWidth = 2;
                     ctx.setLineDash([5, 5]);
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }
 
-                // Proyectil
                 if (projectile) {
                     drawBubble(projectile.x, projectile.y, projectile.color);
                 }
 
-                // Puntuación y Siguiente
+                // Burbujas cayendo
+                for (let f of falling) {
+                    drawBubble(f.x, f.y, f.color);
+                }
+
                 ctx.fillStyle = "white";
                 ctx.font = "bold 16px Arial";
                 ctx.fillText("Puntos: " + score, 20, 30);
-                
+
                 ctx.font = "12px Arial";
                 ctx.fillText("Siguiente:", canvas.width - 80, 30);
                 drawBubble(canvas.width - 30, 45, nextColor);
             }
 
             function update() {
+                // Animar burbujas que caen y eliminarlas al salir de la pantalla
+                for (let f of falling) {
+                    f.vy += 0.5;
+                    f.x += f.vx;
+                    f.y += f.vy;
+                }
+                falling = falling.filter(f => f.y - r < canvas.height + 10);
+
                 if (projectile) {
                     projectile.x += projectile.dx;
                     projectile.y += projectile.dy;
 
-                    // Rebotar en paredes
                     if (projectile.x - r < 0 || projectile.x + r > canvas.width) {
                         projectile.dx *= -1;
+                        projectile.x = Math.max(r, Math.min(canvas.width - r, projectile.x));
                     }
 
-                    // Rebotar en techo
                     if (projectile.y - r < 0) {
                         handleCollision();
                     }
 
-                    // Colisión con otras burbujas
                     if (projectile) {
                         for (let y = 0; y < rows; y++) {
                             for (let x = 0; x < cols; x++) {
@@ -188,7 +221,7 @@
                                     let dist = Math.hypot(projectile.x - pos.x, projectile.y - pos.y);
                                     if (dist < r * 2 - 5) {
                                         handleCollision();
-                                        break; 
+                                        break;
                                     }
                                 }
                             }
@@ -210,7 +243,6 @@
                 let gx = Math.max(0, Math.min(cols - 1, gridPos.x));
                 let gy = Math.max(0, Math.min(rows - 1, gridPos.y));
 
-                // Buscar hueco libre
                 let found = false;
                 if (grid[gy][gx] === null) {
                     found = true;
@@ -233,7 +265,6 @@
                     checkMatches(gx, gy);
                 }
 
-                // Reiniciar disparo
                 projectile = null;
                 isShooting = false;
                 currentColor = nextColor;
@@ -249,7 +280,7 @@
                 while (queue.length > 0) {
                     let curr = queue.shift();
                     let key = `${curr.x},${curr.y}`;
-                    
+
                     if (visited.has(key)) continue;
                     visited.add(key);
 
@@ -278,7 +309,6 @@
                 let connectedToTop = new Set();
                 let queue = [];
 
-                // Encontrar bolas conectadas al techo
                 for (let x = 0; x < cols; x++) {
                     if (grid[0][x] !== null) {
                         queue.push({x: x, y: 0});
@@ -289,12 +319,12 @@
                 while (queue.length > 0) {
                     let curr = queue.shift();
                     let neighbors = [[0,1],[1,0],[-1,0],[0,-1]];
-                    
+
                     for (let n of neighbors) {
                         let nx = curr.x + n[0];
                         let ny = curr.y + n[1];
                         let key = `${ny},${nx}`;
-                        
+
                         if (ny >= 0 && ny < rows && nx >= 0 && nx < cols && !connectedToTop.has(key)) {
                             if (grid[ny][nx] !== null) {
                                 connectedToTop.add(key);
@@ -304,59 +334,75 @@
                     }
                 }
 
-                // Hacer caer las flotantes
-                for (let x = 0; x < cols; x++) {
-                    let floating = [];
-                    for (let y = 0; y < rows; y++) {
+                // Las burbujas sueltas caen fuera de la pantalla y desaparecen
+                let fallenCount = 0;
+                for (let y = 0; y < rows; y++) {
+                    for (let x = 0; x < cols; x++) {
                         if (grid[y][x] !== null && !connectedToTop.has(`${y},${x}`)) {
-                            floating.push(grid[y][x]);
+                            let pos = getPixelPos(x, y);
+                            falling.push({
+                                x: pos.x,
+                                y: pos.y,
+                                vx: (Math.random() - 0.5) * 2,
+                                vy: -2 - Math.random() * 2,
+                                color: grid[y][x].color
+                            });
                             grid[y][x] = null;
-                        }
-                    }
-                    
-                    let bottomY = rows - 1;
-                    for (let i = floating.length - 1; i >= 0; i--) {
-                        while (bottomY >= 0 && grid[bottomY][x] !== null) {
-                            bottomY--;
-                        }
-                        if (bottomY >= 0) {
-                            grid[bottomY][x] = floating[i];
-                            bottomY--;
+                            fallenCount++;
                         }
                     }
                 }
+                score += fallenCount * 20;
             }
 
-            // Eventos del ratón
-            canvas.addEventListener('mousemove', (e) => {
+            // ---- Controles unificados (ratón + táctil + lápiz) ----
+            function updateAim(e) {
                 const rect = canvas.getBoundingClientRect();
-                // Ajuste por si el canvas se escala en pantallas pequeñas
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
-                
                 mouseX = (e.clientX - rect.left) * scaleX;
                 mouseY = (e.clientY - rect.top) * scaleY;
-            });
+            }
 
-            canvas.addEventListener('click', () => {
-                if (!isShooting) {
-                    isShooting = true;
-                    let angle = Math.atan2(mouseY - (canvas.height - 50), mouseX - (canvas.width / 2));
-                    if (angle > 0) angle = Math.PI - angle; 
+            function shoot() {
+                if (isShooting) return;
+                isShooting = true;
+                const angle = getAimAngle();
+                const speed = 12;
+                projectile = {
+                    x: cannonX,
+                    y: cannonY,
+                    dx: Math.cos(angle) * speed,
+                    dy: Math.sin(angle) * speed,
+                    color: currentColor
+                };
+            }
 
-                    let speed = 12;
-                    
-                    projectile = {
-                        x: canvas.width / 2,
-                        y: canvas.height - 50,
-                        dx: Math.cos(angle) * speed,
-                        dy: Math.sin(angle) * speed,
-                        color: currentColor
-                    };
+            // Ratón: mover para apuntar, clic para disparar
+            // Móvil: tocar/arrastrar para apuntar, soltar el dedo para disparar
+            canvas.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                updateAim(e);
+                if (e.pointerType !== 'mouse') {
+                    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
                 }
             });
 
-            // Iniciar el juego
+            canvas.addEventListener('pointermove', (e) => {
+                e.preventDefault();
+                updateAim(e);
+            });
+
+            canvas.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                updateAim(e);
+                shoot();
+            });
+
+            // Evita menú contextual (pulsación larga) y gestos del navegador
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+            document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
             init();
             update();
         };
